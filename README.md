@@ -22,4 +22,8 @@ The design of notesync involves 3 components
 2. Code running in the notebook under the ipython API - combinatiuon of JavaScript and python - the code connect via JavaScript to the user's laptop to get changes and then run python code (which executes on the notebook machine) to write the update
 3. process running on the notebook machine - taking changes and applying them to the local copy of the files.
 
+## References
+Dirsync is an older tool used to sync via external proxy service 'ngrok' [dirsync](https://github.com/tal-franji/miscutil/blob/master/dirsync2.py)
+dirsync.py operates differently - an http server runs on the notebook machine and the client is on the laptop.
+
 
