@@ -26,4 +26,13 @@ The design of notesync involves 3 components
 Dirsync is an older tool used to sync via external proxy service 'ngrok' [dirsync](https://github.com/tal-franji/miscutil/blob/master/dirsync2.py)
 dirsync.py operates differently - an http server runs on the notebook machine and the client is on the laptop.
 
+calling python from JavaScript in [Jupyter](https://jakevdp.github.io/blog/2013/06/01/ipython-notebook-javascript-python-communication/)
+
+Google Colab is a variant of Jupyter with a modified API. 
+callin python from JavaScript in [Google Colab](
+https://colab.research.google.com/notebooks/snippets/advanced_outputs.ipynb#scrollTo=SQM0MFHc6vPI)
+
+
+
+
 
