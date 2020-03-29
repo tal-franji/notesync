@@ -32,12 +32,21 @@ import urllib.parse
 
 iframe_html = """
 <html>
-<body>
-local laptop connection
+<body style="background-color:#159104;">
+laptop OK
 <script>
+function key_vat_to_url(kv) {
+  var parts = [];
+  for(var key in kv)
+     parts.push(key + "=" + encodeURIComponent(kv[key]));
+  return parts.join("&");
+}
+
 function callServer(event) {
     const callAsync = async () => {
-      const response = await fetch('/note.json');
+      console.log("CHILD>>> callin url: " + '/note.json?' + key_vat_to_url(event.data))
+      event.source.postMessage(j, event.origin);
+      const response = await fetch('/note.json?' + key_vat_to_url(event.data));
       var j = await response.json(); //extract JSON from the http response
       console.log("CHILD>>> json from server:", j)
       event.source.postMessage(j, event.origin);
@@ -57,6 +66,18 @@ window.addEventListener("message", receiveMessage, false);
 </body>
 </html>
 """
+
+# for each client Java script - the python code to execute
+notebook_bootstrap_code ={
+    "INI": """
+import os
+import sys
+def _zE(filename):
+    return os.path.exist(filename)
+
+""",
+
+}
 
 g_response_count = 0
 
@@ -82,25 +103,35 @@ class FileSyncServer(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(iframe_html.encode('utf-8'))
 
-    def do_GET(self):
+    def handle_note_javascript_call(self):
+        params = self.parse_params()
+        state = params.get("state", "")
+        if state in notebook_bootstrap_code:
+            self.send_json(status="ok", command=notebook_bootstrap_code[state])
+
+    def send_json(self, **kwargs):
         global g_response_count
-        print("DEBUG >>> do_GET ", self.path)
-        if self.path.startswith("/iframe.html"):
-            return self.send_iframe()
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.end_headers()
+        g_response_count += 1  # DEBUG
+        kwargs["n_debug"] = g_response_count
+        self.wfile.write(json.dumps(kwargs).encode('utf-8'))
 
+    def do_GET(self):
         params = self.parse_params()
+        print("DEBUG >>> do_GET ", self.path, params)
+        if self.path.startswith("/iframe.html"):
+            return self.send_iframe()
+        if self.path.startswith("/note.json"):
+            return self.handle_note_javascript_call()
+        self.send_json(status="error")
+
+
         filename = params.get("file")
         fts = params.get("fts")
         if filename and fts:
             return self.get_file_status(filename)
-        g_response_count += 1  # DEBUG
-        self.wfile.write(json.dumps({"status": "error",
-                                     "n": g_response_count,
-                                     "command": "server='hiiiii'"
-                                     }).encode('utf-8'))
 
     def get_file_status(self, filename):
         full = os.path.join(self.root_dir, filename)
