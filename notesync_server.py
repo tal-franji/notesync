@@ -44,39 +44,44 @@ function key_vat_to_url(kv) {
 
 function callServer(event) {
     const callAsync = async () => {
-      console.log("CHILD>>> callin url: " + '/note.json?' + key_vat_to_url(event.data))
+      //console.log("CHILD>>> callin url: " + '/note.json?' + key_vat_to_url(event.data))
       event.source.postMessage(j, event.origin);
       const response = await fetch('/note.json?' + key_vat_to_url(event.data));
       var j = await response.json(); //extract JSON from the http response
-      console.log("CHILD>>> json from server:", j)
+      //console.log("CHILD>>> json from server:", j)
       event.source.postMessage(j, event.origin);
     };
     callAsync();
 }
 
-
-function receiveMessage(event)
-{
-  console.log("CHILD>>> ", event.data)
-  callServer(event)
-}
-
-window.addEventListener("message", receiveMessage, false);
+window.addEventListener("message", callServer, false);
 </script>
 </body>
 </html>
 """
 
+NOTESYNC_DUMMY_FILE = "_notesync.dummy"
+
 # for each client Java script - the python code to execute
 notebook_bootstrap_code ={
-    "INI": """
+    "INI_DBG": {"command": """
+print('{"debug": "boooo"}')
+"""},
+    "INI": {"command": """
+import json
 import os
 import sys
 def _zE(filename):
-    return os.path.exist(filename)
+    return os.path.exists(filename)
+def _zJ(**kwargs):
+    print(json.dumps(kwargs))
+if _zE("%s"):
+    _zJ(state="LCL")
+else:
+    _zJ(state="DBG")
+""" % NOTESYNC_DUMMY_FILE},
 
-""",
-
+    "LCL": {"message": "ERROR - notebook and laptop-server running on same machine/folder "}
 }
 
 g_response_count = 0
@@ -106,8 +111,15 @@ class FileSyncServer(http.server.BaseHTTPRequestHandler):
     def handle_note_javascript_call(self):
         params = self.parse_params()
         state = params.get("state", "")
+        py_response = json.loads(params.get("py_response", "{}"))
+        next_state = py_response.get("state", state)
         if state in notebook_bootstrap_code:
-            self.send_json(status="ok", command=notebook_bootstrap_code[state])
+            res = dict()
+            res.update(notebook_bootstrap_code[state])
+            res.update(status="ok", state=next_state)
+            return self.send_json(**res)
+
+        self.send_json(status="error", message="ERROR NOTESYNC state error")
 
     def send_json(self, **kwargs):
         global g_response_count
@@ -116,7 +128,9 @@ class FileSyncServer(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         g_response_count += 1  # DEBUG
         kwargs["n_debug"] = g_response_count
-        self.wfile.write(json.dumps(kwargs).encode('utf-8'))
+        response = json.dumps(kwargs).encode('utf-8')
+        print("DEBUG >>> response: ", response)
+        self.wfile.write(response)
 
     def do_GET(self):
         params = self.parse_params()
@@ -354,49 +368,13 @@ def client_main(args):
 
 
 def server_main(args):
+    with open(NOTESYNC_DUMMY_FILE, "w+t") as df:
+        df.writelines(["DUMMY FILE TO CHECK notesync and jupyter not in same dir"])
     server = args.server
     addr = server
     if addr == "127.0.0.1":
         addr = ""   # use for server default
     StartSyncServer(addr, args.port, args.dir)
-
-
-def ipython_sync_via_ngrok(extra_apps=[]):
-    import re
-    import json
-    all_apps = set(extra_apps + ['dirsync', 'ngrok'])
-    ps_result = get_ipython().getoutput('ps x', split=True)
-    ps = [re.split(r'\s+', s, maxsplit=5)[5] for s in ps_result if s]
-    app_command = [
-        ('tensorboard', 'tensorboard --logdir=/content/log/fit --host 0.0.0.0 --port 6006 &'),
-        ('dirsync', 'python3 notesync_server.py --destination --dir . --port 8000 &'),
-        ('ngrok', './ngrok start -config=./ngrok.yml dirsync  &'),
-    ]
-    for app, cmd in app_command:
-        if not app in all_apps:
-            continue
-        for s in ps:
-            if app in s:
-                break
-        else:
-            print("Running : ", cmd)
-            get_ipython().system_raw(cmd)
-            ###OLD: get_ipython().system_raw('./ngrok http -inspect=false 6006 &')
-    ngrok_result = json.loads(str(get_ipython().getoutput('curl -s http://localhost:4040/api/tunnels', split=False)))
-    #print(ngrok_result)
-    dir_sync_url = None
-    for t in ngrok_result['tunnels']:
-        name = t['name']
-        if "dirsync" in name:
-            if dir_sync_url is None or "(http)" in name:
-                # take first or the http one (not https)
-                dir_sync_url = t['public_url']
-        #print(name, t['public_url'])
-    print("""
-    #### ON LAPTOP RUN:
-    python notesync_server.py --source  --dir . --rex_include "^.*\\.(ini|py)$" --server {}
-    #### THIS syncs your laptop current directory with the notebook VM (all .py files)
-    """.format(dir_sync_url))
 
 def xor(a, b):
     return (not a and b) or (a and not b)
