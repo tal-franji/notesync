@@ -30,6 +30,12 @@ We do not knwo how well this may work. We do not know what happens when the note
 
 We need to think on proper UI in the notebook that shows if the notebook server is connected, the Notebook-machine process is connected, and how many changes are pending for updates.
 
+### Progress
+#### POC-1
+We've created POC-1 that show passing information from laptop server to
+the notebook's python interpreter via JavaScript
+code + iframe.
+
 ## References
 Dirsync is an older tool used to sync via external proxy service 'ngrok' [dirsync](https://github.com/tal-franji/miscutil/blob/master/dirsync2.py)
 dirsync.py operates differently - an http server runs on the notebook machine and the client is on the laptop.
