@@ -12,6 +12,7 @@ import json
 import os
 import re
 import http.server
+import random
 import sys
 import time
 import urllib.parse
@@ -215,6 +216,8 @@ class FileSyncHandler(http.server.BaseHTTPRequestHandler):
         file_to_upload = None
         while len(files_to_check_target_mtime) < 10:
             filename, local_mtime, target_mtime = self.looper.next()
+            if not filename:  # may be None because of frequency
+                break
             files_to_check_target_mtime.append(filename)
             if not target_mtime or target_mtime < local_mtime:
                 file_to_upload = filename
@@ -336,7 +339,7 @@ class FileLooper(object):
         self.pat_exclude = [re.compile(r) for r in exclude_regex] if exclude_regex else None
         self.files_attr = {}  # map filename -> FileAttr
         self.log_count = 0
-        self.speed = 1.0
+        self.frequency = 1.0  # every 1 calls(second) give a new file
         self._root_dir = root_dir
         self.recently_changed = set()
         self.loop_iter = iter_merge_infinite_loop(lambda: IterRelativePath(self._root_dir),
@@ -359,6 +362,9 @@ class FileLooper(object):
         self.next()
 
     def next(self):
+        r = random.randint(0,1000)
+        if r > int(500 /self.frequency):
+            return (None, 0, 0)  # no files to send
         filename = self.loop_iter.__next__()
         attr = self.files_attr.get(filename, FileAttr(0, 0))
         full = os.path.join(self._root_dir, filename)
@@ -367,8 +373,9 @@ class FileLooper(object):
         if updated:
             self.recently_changed.add(filename)
             # if updated - accelerate
-            self.speed /= 2.0
+            self.frequency = max(self.frequency / 2.0, 0.1);
         else:
+            self.frequency = min(self.frequency * 1.01, 50);
             # check if need to remove from recently changed
             if filename in self.recently_changed and time.time() - attr.local_mtime > 5 * 60:
                 self.recently_changed.remove(filename)
